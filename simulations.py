@@ -14,7 +14,7 @@ from ibe_er import run_simulations,plot_results,plot_mean_std,export_results_to_
 # Main Code
 if __name__ == "__main__":
     # Configuration
-    n_repetitions=10
+    n_repetitions=1000
     ntosses_list = [10, 25, 50, 100]
     partitioning = [3, 5, 7, 9, 11]
     thresholds = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
