@@ -397,10 +397,12 @@ def plot_mean_std(results, partitioning, bias_lower, bias_upper, rule_labels, ma
         plt.savefig(filename, format='pdf')
         plt.show()
 
-def export_results_to_csv(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, n_tosses):
+def export_results_to_csv(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, output_dir, n_tosses):
     """
     Export simulation results to CSV files for each partition.
     """
+    os.makedirs(output_dir, exist_ok=True)
+    
     for i, partition in enumerate(partitioning):
         current_partition_results = results[i]
         num_biases = partition
@@ -417,7 +419,7 @@ def export_results_to_csv(results, partitioning, thresholds, bias_lower, bias_up
 
         # Define CSV filename
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        filename = f'n_tosses_{n_tosses}_partition_{partition}_results_{timestamp}.csv'
+        filename = os.path.join(output_dir, f'n_tosses_{n_tosses}_partition_{partition}_results_{timestamp}.csv')
 
         # Write to CSV
         with open(filename, mode='w', newline='') as file:
