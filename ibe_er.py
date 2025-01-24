@@ -223,6 +223,7 @@ def single_experiment(
 
     return ibe_er_result, ibe_standard,jc_result, ibe_star_result
 
+
 def simulation(
     nr_repetitions, true_bias, nr_tosses, evid_uncertainty_threshold, 
     weight_positive=1, weight_negative=1, hyp_space=[1/6, 2/6, 3/6, 4/6, 5/6], 
@@ -306,7 +307,7 @@ def run_simulations(n_tosses,n_repetitions=1000, bias_lower=.1, bias_upper=.9, p
         for threshold in thresholds:
             print(f"Threshold: {threshold}")
             threshold_results = []
-            for bias in np.linspace(bias_lower, bias_upper, partition):
+            for bias in np.linspace(bias_lower,bias_upper,partition)[int(len(np.linspace(bias_lower,bias_upper,partition))/2):]:
                 print(f"Bias: {bias}")
                 threshold_results.append(
                     simulation(n_repetitions, bias, n_tosses, threshold, weight_positive, weight_negative, 
@@ -316,36 +317,47 @@ def run_simulations(n_tosses,n_repetitions=1000, bias_lower=.1, bias_upper=.9, p
         results.append(partition_results)
     return results
 
-def plot_results(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, output_dir, n_tosses):
+def plot_results(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
     """
-    Generate and save plots for simulation results.
+    Generate and save plots for simulation results with x-ticks corresponding to bias_values.
     """
     os.makedirs(output_dir, exist_ok=True)
 
     for i, partition in enumerate(partitioning):
         current_partition_results = results[i]
         num_biases = partition
-        bias_values = np.linspace(bias_lower, bias_upper, num_biases)
-
+        bias_values = np.linspace(bias_lower, bias_upper, num_biases)[int(len(np.linspace(bias_lower, bias_upper, num_biases)) / 2):]
+        jitter = ((max(bias_values)-min(bias_values))/(len(bias_values-1)))*.25
         # Plot results for each threshold
         fig, axes = plt.subplots(2, 3, figsize=(15, 10), sharey=True)
         fig.suptitle(f'Partition: {partition}', fontsize=16)
 
         for j, threshold_results in enumerate(current_partition_results):
+            position=-1
             row, col = divmod(j, 3)
             ax = axes[row, col]
 
-            for rule_idx, rule_name in enumerate(rule_labels):
+            for rule_idx, (rule_name, marker) in enumerate(zip(rule_labels, marker_styles)):
                 rule_values = [bias_result[rule_idx] for bias_result in threshold_results]
-                ax.plot(bias_values, rule_values, label=rule_name)
+                bias_values_jittered = [val + jitter*position for val in bias_values]
+                ax.plot(bias_values_jittered, rule_values, label=rule_name,marker=marker, linestyle='None', markersize=8)
+                position+=0.5
 
             ax.set_title(f'Threshold: {thresholds[j]:.1f}')
             ax.set_xlabel('Bias')
-            ax.grid(True)
+            ax.set_xticks(bias_values)  # Set x-ticks to correspond to bias_values
+            ax.set_xticklabels([f"{bias:.2f}" for bias in bias_values])  # Add labels
+            
+            bias_val_dif = bias_values[1]-bias_values[0]
+            grid_values = [val + bias_val_dif/2 for val in bias_values[:-1]]  # Example grid values
+            # Manually add vertical grid lines at the specific grid positions
+            for gv in grid_values:
+                ax.axvline(gv, color='black', linestyle='--', linewidth=0.7)
+            ax.axhline(0, color='lightgray', linestyle='--', linewidth=0.7)
             if col == 0:
                 ax.set_ylabel('Values')
 
-        # Hide unused subplots
+        # Hide unused axes for columns 2 and 3
         for j in range(len(thresholds), 6):
             row, col = divmod(j, 3)
             axes[row, col].axis('off')
@@ -359,6 +371,54 @@ def plot_results(results, partitioning, thresholds, bias_lower, bias_upper, rule
         plt.savefig(filename, format='pdf')
         plt.show()
 
+        
+def plot_results2(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
+    """
+    Generate and save plots for simulation results, creating a separate plot for each threshold.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    for i, partition in enumerate(partitioning):
+        current_partition_results = results[i]
+        num_biases = partition
+        bias_values = np.linspace(bias_lower,bias_upper,num_biases)[int(len(np.linspace(bias_lower,bias_upper,num_biases))/2):]
+        jitter = ((max(bias_values)-min(bias_values))/(len(bias_values-1)))*.25
+
+
+        # Iterate over thresholds and generate separate plots
+        for j, threshold_results in enumerate(current_partition_results):
+            position=-1
+            # Create a new plot for each threshold
+            fig, ax = plt.subplots(figsize=(10, 6))
+            fig.suptitle(f'Partition: {partition}, Threshold: {thresholds[j]:.1f}', fontsize=16)
+
+            for rule_idx, (rule_name, marker) in enumerate(zip(rule_labels, marker_styles)):
+                rule_values = [bias_result[rule_idx] for bias_result in threshold_results]
+                bias_values_jittered = [val + jitter*position for val in bias_values]
+                ax.plot(bias_values_jittered, rule_values, label=rule_name,marker=marker, linestyle='None', markersize=8)
+                position+=0.5
+
+            ax.set_xlabel('Bias')
+            ax.set_xticks(bias_values)  # Set x-ticks to correspond to bias_values
+            ax.set_xticklabels([f"{bias:.2f}" for bias in bias_values])  # Add labels
+            ax.set_ylabel('Values')
+            bias_val_dif = bias_values[1]-bias_values[0]
+            grid_values = [val + bias_val_dif/2 for val in bias_values[:-1]]  # Example grid values
+            # Manually add vertical grid lines at the specific grid positions
+            for gv in grid_values:
+                ax.axvline(gv, color='black', linestyle='--', linewidth=0.7)
+            ax.axhline(0, color='lightgray', linestyle='--', linewidth=0.7)
+            ax.legend(loc='upper left')
+
+            # Save the plot for the current threshold
+            filename = os.path.join(output_dir, f"n_tosses_{n_tosses}_partition_{partition}_threshold_{thresholds[j]:.1f}_plot.pdf")
+            plt.tight_layout()
+            plt.subplots_adjust(top=0.9)  # Adjust the title area
+
+            plt.savefig(filename, format='pdf')
+            plt.show()  # Show the plot for visual inspection
+
+
 def plot_mean_std(results, partitioning, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
     """
     Generate and save mean and standard deviation plots across thresholds.
@@ -368,11 +428,13 @@ def plot_mean_std(results, partitioning, bias_lower, bias_upper, rule_labels, ma
     for i, partition in enumerate(partitioning):
         current_partition_results = results[i]
         num_biases = partition
-        bias_values = np.linspace(bias_lower, bias_upper, num_biases)
+        bias_values = np.linspace(bias_lower,bias_upper,num_biases)[int(len(np.linspace(bias_lower,bias_upper,num_biases))/2):]
+        jitter = ((max(bias_values)-min(bias_values))/(len(bias_values-1)))*.25
 
         title_str = f"Coin biases for H: {', '.join([f'{b:.2f}' for b in bias_values])}"
         fig, ax = plt.subplots(figsize=(10, 6))
         fig.suptitle(title_str, fontsize=16)
+        position=-1
 
         for rule_idx, (rule_name, marker) in enumerate(zip(rule_labels, marker_styles)):
             all_rule_values = np.array([
@@ -381,13 +443,22 @@ def plot_mean_std(results, partitioning, bias_lower, bias_upper, rule_labels, ma
             ])
             mean_values = np.mean(all_rule_values, axis=0)
             std_values = np.std(all_rule_values, axis=0)
+            bias_values_jittered = [val + jitter*position for val in bias_values]
 
-            ax.errorbar(bias_values, mean_values, yerr=std_values, label=rule_name,
+            ax.errorbar(bias_values_jittered, mean_values, yerr=std_values, label=rule_name,
                         capsize=5, marker=marker, linestyle='None', markersize=8)
+            position+=0.5
 
         ax.set_xlabel('Bias')
+        ax.set_xticks(bias_values)  # Set x-ticks to correspond to bias_values
+        ax.set_xticklabels([f"{bias:.2f}" for bias in bias_values])  # Add labels
         ax.set_ylabel('Values')
-        ax.grid(True)
+        bias_val_dif = bias_values[1]-bias_values[0]
+        grid_values = [val + bias_val_dif/2 for val in bias_values[:-1]]  # Example grid values
+        # Manually add vertical grid lines at the specific grid positions
+        for gv in grid_values:
+            ax.axvline(gv, color='black', linestyle='--', linewidth=0.7)
+        ax.axhline(0, color='lightgray', linestyle='--', linewidth=0.7)
         ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
         plt.tight_layout()
@@ -406,7 +477,7 @@ def export_results_to_csv(results, partitioning, thresholds, bias_lower, bias_up
     for i, partition in enumerate(partitioning):
         current_partition_results = results[i]
         num_biases = partition
-        bias_values = np.linspace(bias_lower, bias_upper, num_biases)
+        bias_values = np.linspace(bias_lower,bias_upper,num_biases)[int(len(np.linspace(bias_lower,bias_upper,num_biases))/2):]
 
         # Prepare the data for CSV
         csv_data = []
