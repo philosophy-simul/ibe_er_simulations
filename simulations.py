@@ -22,7 +22,7 @@ if __name__ == "__main__":
     bias_upper = 0.9
     weight_positive=1
     weight_negative=1
-    rule_labels = ['IBE_ER', 'IBE_St', 'JC', 'IBE*']
+    rule_labels = [r'IBE$_{ER}$', r'IBE$_{St}$', r'Inf$_{JC}$', r'IBE$_{JC}$']
     marker_styles = ['o', 's', 'D', '^']  # Markers for each rule
     test=False
     prefix=""
