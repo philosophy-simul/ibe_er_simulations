@@ -1,4 +1,4 @@
-Simulation of biased coin tosses and inference using various evidence-based methods (part of ongoing work with Finnur Dellsén).
+Simulation of biased coin tosses and inference using various evidence-based methods.
 
 Load both scripts and then run using simulations.py in Python 3.x.
 
