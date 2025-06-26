@@ -6,40 +6,48 @@ Simulation of biased coin tosses and inference using various evidence-based meth
 Started on Tue Nov 12 17:06:46 2024
 @author: boruttrpin
 """
-
-from ibe_er import run_simulations,plot_results,plot_results2,plot_mean_std,export_results_to_csv
-
+import multiprocessing
+from ibe_er import run_config
 
 
 # Main Code
-if __name__ == "__main__":
-    # Configuration
-    n_repetitions=1000
-    ntosses_list = [10, 25, 50, 100]
-    partitioning = [3, 5, 7, 9, 11]
-    thresholds = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    bias_lower = 0.1
-    bias_upper = 0.9
-    weight_positive=1
-    weight_negative=1
-    rule_labels = [r'IBE$_{ER}$', r'IBE$_{St}$', r'Inf$_{JC}$', r'IBE$_{JC}$']
-    marker_styles = ['o', 's', 'D', '^']  # Markers for each rule
-    test=False
-    prefix=""
-    if test:
-        prefix="test/"
-        n_repetitions=10
-    else:
-        prefix="bonus_"+str(weight_positive)+"_malus_"+str(weight_negative)+"_nr_runs_"+str(n_repetitions)+"/"
-    output_dir_plots = prefix+"plots-joint"
-    output_dir_plots_single = prefix+"plots-single"
-    output_dir_data=prefix+"data"
+if __name__ == '__main__':
+    multiprocessing.set_start_method('spawn', force=True)
 
-    # Run simulations and generate plots
-    for ntosses in ntosses_list:
-        print(f"Running simulations for n_tosses: {ntosses}")
-        results = run_simulations(ntosses, n_repetitions, bias_lower, bias_upper, partitioning, thresholds,weight_positive,weight_negative)
-        plot_results(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir_plots, ntosses)
-        plot_results2(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir_plots, ntosses)
-        plot_mean_std(results, partitioning, bias_lower, bias_upper, rule_labels, marker_styles, output_dir_plots_single, ntosses)
-        export_results_to_csv(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, output_dir_data, ntosses)
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    n_repetitions = 1000
+    partitioning = [3, 7, 11]
+    thresholds = [0.5, 0.6, 0.7, 0.8, 0.9]
+    bias_lower = 0
+    bias_upper = 1.0
+    rule_labels = ['IBE-ER', 'IBE-Standard', 'IBE-StandardFiltered', 'JC', 'IBE-Star']
+    marker_styles = ['o', 's', 'D', '^', '*']
+
+    tasks = []
+    for n_tosses in [10, 25, 50, 100]:
+        for uncert_lower in [0.5, 0.75, 0.9]:
+            for uncert_upper in [0.6, 0.85, 1.0]:
+                if uncert_lower >= uncert_upper:
+                    continue
+                for weight_positive in [0, 1, 2, 10]:
+                    for weight_negative in [0, 1, 2, 10]:
+                        if weight_positive == weight_negative and weight_positive != 1:
+                            continue
+                        tasks.append((
+                            n_tosses, n_repetitions, partitioning, thresholds, bias_lower, bias_upper,
+                            weight_positive, weight_negative, uncert_lower, uncert_upper,
+                            rule_labels, marker_styles
+                        ))
+
+    print(f"Total runs: {len(tasks)}")
+
+    with ProcessPoolExecutor() as executor:
+        futures = [executor.submit(run_config, *args) for args in tasks]
+        for i, future in enumerate(as_completed(futures), 1):
+            try:
+                result = future.result()
+                print(f"{i}/{len(tasks)} - {result}")
+            except Exception as e:
+                print(f"Error in task {i}: {e}")
+
