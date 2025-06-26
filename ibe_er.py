@@ -10,11 +10,12 @@ Started on Tue Nov 12 17:06:46 2024
 import numpy as np
 from itertools import chain, repeat, count, islice
 from collections import Counter
-from typing import List, Dict, Tuple, Optional, Union
+from typing import List, Dict, Tuple
 import os
 from matplotlib import pyplot as plt
 import csv
 import datetime
+from itertools import combinations
 
 def coin_toss_sequence(bias: float, n: int) -> List[int]:
     """
@@ -29,6 +30,7 @@ def coin_toss_sequence(bias: float, n: int) -> List[int]:
     """
     return (np.random.uniform(0, 1, n) <= bias).astype(int).tolist()
 
+# This gives factual evidence.
 
 def uncertain_sequence(
     sequence: List[int], lower_bound: float = 0.5, upper_bound: float = 1.0
@@ -45,51 +47,32 @@ def uncertain_sequence(
         List[Dict[str, float]]: Sequence of toss outcomes with evidential certainty.
     """
     uncertainties = np.random.uniform(lower_bound, upper_bound, len(sequence))
-    return [{"toss": toss, "evidential certainty": certainty} for toss, certainty in zip(sequence, uncertainties)]
+    observed_evidence = []
+    for toss,unc in zip(sequence,uncertainties):
+        if np.random.uniform(0,1)<=unc:
+            observed_evidence.append(toss)
+        else:
+            observed_evidence.append(1-toss)
+    return [{"toss": toss, "evidential certainty": certainty} for toss, certainty in zip(observed_evidence, uncertainties)]
 
-def certain_uncertain_evidence(uncertain_sequence, threshold):
+# This gives associated uncertainty levels.
+
+        
+def certain_uncertain_evidence(uncertain_seq, threshold,observations):
     certain_evidence = []
     uncertain_evidence = []
-    evidence_ibeST = []
-    
     # Loop through each entry in the list and apply the flipping condition
-    for entry in uncertain_sequence:
-        toss = entry['toss']
+    for entry,toss in zip(uncertain_seq,observations):
         evidCertainty = entry['evidential certainty']
         
         if evidCertainty >= threshold:
             certain_evidence.append(toss)
-            evidence_ibeST.append(toss)
 
         else:
             uncertain_evidence.append(toss)
-            if np.random.uniform(0,1)<=evidCertainty:
-                evidence_ibeST.append(toss)
-            else:
-                evidence_ibeST.append(1-toss)
 
+    return [certain_evidence,uncertain_evidence]
 
-
-    return [certain_evidence,uncertain_evidence],evidence_ibeST
-
-
-
-
-def generate_subsets(a, b):
-    # Set to hold unique subsets (as tuples)
-    unique_subsets = set()
-    # Generate subsets of b, including the empty subset
-    for r in range(len(b) + 1):
-        observed_subsets=[]
-        for subset_b in unique_combinations(b, r):
-            if subset_b not in observed_subsets:
-                observed_subsets.append(subset_b)
-                # For each subset of b, combine it with all elements from a
-                subset = tuple(a) + tuple(subset_b)
-                unique_subsets.add(subset)  # Add the tuple to the set (removes duplicates)
-    
-    # Convert the set back to a list and return
-    return [list(subset) for subset in unique_subsets]
 
 
 def best_expl(sequence: List[int], hyp_space: List[float]) -> np.ndarray:
@@ -107,21 +90,48 @@ def best_expl(sequence: List[int], hyp_space: List[float]) -> np.ndarray:
     diffs = np.abs(np.array(hyp_space) - ratio)
     return np.array(hyp_space)[diffs == diffs.min()]
 
+def likelihood_calibration(likelihoods_heads, certainty_heads):
+    first_pass = [l*certainty_heads + (1-l)*(1-certainty_heads) for l in likelihoods_heads]
+    second_pass = [l*certainty_heads + (1-l)*(1-certainty_heads) for l in first_pass]
 
-def jc_ibe_star(uncertain_sequence, priorJC=None, hyp_space=None, bonus=0.1):
+    return second_pass
+    
+def best_expl_uncert(uncertain_seq, hyp_space) -> np.ndarray:
+    observed_heads = [i["evidential certainty"] if i["toss"]==1 else 1-i["evidential certainty"] for i in uncertain_seq]
+    total_observed_heads = sum(observed_heads)
+    expected_observations = np.zeros(len(hyp_space))
+    for outcome in uncertain_seq:
+        expected_observations+= np.array(likelihood_calibration(hyp_space,outcome["evidential certainty"]))
+        # Compute absolute differences
+    differences = np.abs(expected_observations - total_observed_heads)
+    
+    # Find the minimum difference
+    min_diff = np.min(differences)
+    
+    # Get all indices where the difference equals the minimum
+    closest_indices = np.where(np.isclose(differences, min_diff))[0]
+    
+    return closest_indices
+
+
+
+
+def jc_ibe_star(uncertain_seq, priorJC=None, hyp_space=None, bonus=0.1):
     if hyp_space is None:
         hyp_space = [1/6, 2/6, 3/6, 4/6, 5/6]
     if priorJC is None:
         priorJC = [1 / len(hyp_space)] * len(hyp_space)  # Uniform prior by default
     priorIBE = priorJC
+
     posteriorJC = []
     posteriorIBE = []
+
     distrsJC = [priorJC[:]]
     distrsIBE = [priorJC[:]]
-    biases = np.array(hyp_space)
-    observed_tosses = []
 
-    for outcome in uncertain_sequence:
+    observed_tosses = []
+    uncertain_seq2=[]
+    for outcome in uncertain_seq:
         toss = outcome["toss"]
         p_e_post = outcome["evidential certainty"]
         
@@ -137,10 +147,11 @@ def jc_ibe_star(uncertain_sequence, priorJC=None, hyp_space=None, bonus=0.1):
             observed_tosses.append(1 - toss)
         else:
             observed_tosses.append(toss if np.random.uniform(0, 1) < 0.5 else 1 - toss)
-        
-        # Determine likelihoods for the current toss
-        likelihoods = hyp_space if toss == 1 else [1 - p for p in hyp_space]
-        
+        uncertain_seq2.append(outcome)
+        likelihoods = likelihood_calibration(hyp_space,p_e_post)
+        if toss!=1:
+            likelihoods=[1-i for i in likelihoods]
+        likelihoods=np.array(likelihoods)
         # JC Update
         p_h_and_e = np.array([p_h_prior * p_e_given_h for p_h_prior, p_e_given_h in zip(priorJC, likelihoods)])
         p_h_and_neg_e = np.array([p_h_prior * (1 - p_e_given_h) for p_h_prior, p_e_given_h in zip(priorJC, likelihoods)])
@@ -150,8 +161,7 @@ def jc_ibe_star(uncertain_sequence, priorJC=None, hyp_space=None, bonus=0.1):
         posteriorJC = p_e_post * p_h_given_e + (1 - p_e_post) * p_h_given_neg_e
 
         # IBE Update
-        IBE = np.array(best_expl(observed_tosses, biases))
-        IBEindex = np.where(np.isin(biases, IBE))[0]
+        IBEindex = best_expl_uncert(uncertain_seq2, hyp_space)
         p_h_and_e_ibe = np.array([p_h_prior * p_e_given_h for p_h_prior, p_e_given_h in zip(priorIBE, likelihoods)])
         p_h_and_neg_e_ibe = np.array([p_h_prior * (1 - p_e_given_h) for p_h_prior, p_e_given_h in zip(priorIBE, likelihoods)])
         p_h_and_e_ibe[IBEindex] += bonus / len(IBEindex)
@@ -161,6 +171,7 @@ def jc_ibe_star(uncertain_sequence, priorJC=None, hyp_space=None, bonus=0.1):
         p_h_given_e_ibe = p_h_and_e_ibe / p_e_prior_ibe
         p_h_given_neg_e_ibe = p_h_and_neg_e_ibe / p_neg_e_prior_ibe
         posteriorIBE = p_e_post * p_h_given_e_ibe + (1 - p_e_post) * p_h_given_neg_e_ibe
+        
 
         # Append updated distributions
         distrsJC.append(posteriorJC)
@@ -168,14 +179,34 @@ def jc_ibe_star(uncertain_sequence, priorJC=None, hyp_space=None, bonus=0.1):
 
     return distrsJC, distrsIBE
 
+def expected_score_prob(distr,bonus,penalty):
+    options=range(len(distr))
+    # Generate all non-empty subsets
+    all_subsets = []
+    
+    for r in range(1, len(options) + 1):
+        for subset in combinations(options, r):
+            all_subsets.append(list(subset))
+    
+    subset_sums = [sum(distr[i] for i in subset) for subset in all_subsets]
+    
+    eus = []
+    for option,pr in zip(all_subsets,subset_sums):
+        eus.append(pr*((len(distr) - len(option)) / (len(distr) - 1)) * bonus - (1-pr)*penalty)
+    return all_subsets[eus.index(max(eus))]
+
+
+
 def single_experiment(
     true_bias: float,
     nr_tosses: int,
-    evid_certainty_threshold: float,
+    thresholds: List[float],
     hyp_space: List[float],
     lower_bound: float = 0.5,
     upper_bound: float = 1.0,
     bonus: float = 0.1,
+    weight_positive=1,
+    weight_negative=1
 ) -> Tuple[np.ndarray, ...]:
     """
     Conduct a single inference experiment with uncertain evidence.
@@ -195,76 +226,139 @@ def single_experiment(
     hyp_space=np.array(hyp_space)
     sequence = coin_toss_sequence(true_bias, nr_tosses)
     uncertain_evidence = uncertain_sequence(sequence, lower_bound, upper_bound)
-    certain_uncertain_ev=certain_uncertain_evidence(uncertain_evidence,evid_certainty_threshold)
-    # ibe ER
-    certain_partition=certain_uncertain_ev[0][0]
-    uncertain_partition = certain_uncertain_ev[0][1]
-    if certain_partition==[]:
-        ibe_er_result=np.array(hyp_space)
-        # if all evidence is uncertain, everything may be inferred (i.e., no informational value)
-    elif uncertain_partition==[]:
-        ibe_er_result=np.array(best_expl(certain_partition,hyp_space))
-        # if all evidence is certain, then all evidence needs to be explained.
-    else:
-        # else: we need to explain all subsets of uncertain evidence combined with certain evidence.
-        evidentialSubsets=generate_subsets(certain_partition,uncertain_partition)
-        expls_ER=[best_expl(i,hyp_space) for i in evidentialSubsets]
-        flattened_expls = np.concatenate(expls_ER)
-        ibe_er_result = np.unique(flattened_expls)
+    threshold_results=[]
+    observations = [uncertain_evidence[i]["toss"] for i in range(len(uncertain_evidence))]
+    for threshold in thresholds:
+        certain_uncertain_ev=certain_uncertain_evidence(uncertain_evidence,threshold,observations)
+        # ibe ER
+        certain_partition=certain_uncertain_ev[0]
+        uncertain_partition = certain_uncertain_ev[1]
+        if certain_partition==[]:
+            ibe_er_result=np.array(hyp_space)
+            # if all evidence is uncertain, everything may be inferred (i.e., no informational value)
+        elif uncertain_partition==[]:
+            ibe_er_result=np.array(best_expl(certain_partition,hyp_space))
+            # if all evidence is certain, then all evidence needs to be explained.
+        else:
+            # else: we need to explain all subsets of uncertain evidence combined with certain evidence.
+            evidentialSubsets=generate_subsets(certain_partition,uncertain_partition)
+            expls_ER=[best_expl(i,hyp_space) for i in evidentialSubsets]
+            flattened_expls = np.concatenate(expls_ER)
+            ibe_er_result = np.unique(flattened_expls)
+        
+        # ibe Standard: gets the observed evidence, explains it
+        ibe_standard = best_expl(certain_partition+uncertain_partition,hyp_space)
+        # ibe Standard-filtered: only explains the certain part, disregards the uncertain evidence
+        if certain_partition!=[]:
+            ibe_standardFiltered = best_expl(certain_partition,hyp_space)
+        else:
+            ibe_standardFiltered=np.array(hyp_space)
+            # if there is no certain evidence, just make no inference, i.e. infer a disjunction of every option.
+            
+        # JC-IBE-Star inference
+        prob=jc_ibe_star(uncertain_evidence,None,hyp_space,bonus)
+        jc_result=np.array([hyp_space[i] for i in expected_score_prob(prob[0][-1], weight_positive, weight_negative)])
+        ibe_star_result=np.array([hyp_space[i] for i in expected_score_prob(prob[1][-1], weight_positive, weight_negative)])
+        threshold_results.append([ibe_er_result, ibe_standard,ibe_standardFiltered,jc_result,ibe_star_result])
+    return threshold_results
+
     
-    # ibe Standard: above some evidential threshold, gets the correct evidence, else it depends on the chance
-    ibe_standard = best_expl(certain_uncertain_ev[1],hyp_space)
-
-
-    # JC-IBE-Star inference
-    probabilistic = jc_ibe_star(uncertain_evidence,None,hyp_space,bonus)
-    jc_result=hyp_space[np.where(probabilistic[0][-1]==probabilistic[0][-1].max())]
-    ibe_star_result=hyp_space[np.where(probabilistic[1][-1]==probabilistic[1][-1].max())]
-
-    return ibe_er_result, ibe_standard,jc_result, ibe_star_result
-
-
 def simulation(
-    nr_repetitions, true_bias, nr_tosses, evid_uncertainty_threshold, 
+    nr_repetitions, true_bias, nr_tosses, thresholds, 
     weight_positive=1, weight_negative=1, hyp_space=[1/6, 2/6, 3/6, 4/6, 5/6], 
-    lower_bound=0.5, upper_bound=1, printing=True
+    lower_bound=0.5, upper_bound=1,bonus=0.1
 ):
-    ibe_er_score = 0
-    ibe_standard_score = 0
-    jc_score = 0
-    ibe_star_score = 0
 
+    thresh_scores=[]
     for run in range(nr_repetitions):
-        res = single_experiment(true_bias, nr_tosses, evid_uncertainty_threshold, hyp_space, lower_bound, upper_bound)
+        i=0
+        res = single_experiment(true_bias, nr_tosses, thresholds, hyp_space, lower_bound, upper_bound,bonus,weight_positive,weight_negative)
+        thresh_scores_temp=[]
+        for thresh in res:
+            ibeer=0
+            ibestand=0
+            ibestandFilt=0
+            jc=0
+            ibest=0
+            if true_bias in thresh[0]:
+                ibeer+=((len(hyp_space) - len(thresh[0])) / (len(hyp_space) - 1)) * weight_positive
+            else:
+                ibeer-=weight_negative
+    
+            if true_bias in thresh[1]:
+                ibestand+=((len(hyp_space) - len(thresh[1])) / (len(hyp_space) - 1)) * weight_positive
+            else:
+                ibestand-=weight_negative
+    
+            if true_bias in thresh[2]:
+                ibestandFilt+=((len(hyp_space) - len(thresh[2])) / (len(hyp_space) - 1)) * weight_positive
+            else:
+                ibestandFilt-=weight_negative
+            if true_bias in thresh[3]:
+                jc+=((len(hyp_space) - len(thresh[3])) / (len(hyp_space) - 1)) * weight_positive
+            else:
+                jc-=weight_negative
+            if true_bias in thresh[4]:
+                ibest+=((len(hyp_space) - len(thresh[4])) / (len(hyp_space) - 1)) * weight_positive
+            else:
+                ibest-=weight_negative
+            thresh_scores_temp.append([ibeer,ibestand,ibestandFilt,jc,ibest])
 
-        if true_bias in res[0]:
-            ibe_er_score += ((len(hyp_space) - len(res[0])) / (len(hyp_space) - 1)) * weight_positive
-        else:
-            ibe_er_score -= weight_negative
+            i+=1
+        thresh_scores.append(thresh_scores_temp)
+        
+# Initialize result containers
+    avg_thresh = []
+    std_thresh = []
+    
+    for run_idx in range(len(thresh_scores[0])):  # for each parameter
+        param_avg = []
+        param_std = []
+        for metric_idx in range(len(thresh_scores[0][run_idx])):  # for each metric
+            # Get all values for this parameter-metric pair
+            values = [run[run_idx][metric_idx] for run in thresh_scores]
+            mean = sum(values) / nr_repetitions
+            variance = sum((x - mean) ** 2 for x in values) / (nr_repetitions - 1) if nr_repetitions > 1 else 0
+            stddev = np.sqrt(variance)
+            param_avg.append(mean)
+            param_std.append(stddev)
+        avg_thresh.append(param_avg)
+        std_thresh.append(param_std)
+    
+    # Determine the number of metric positions (2 in this case)
+    num_metrics = len(thresh_scores[0][0])
+    
+    all_values = [[] for _ in range(num_metrics)]  # Create a list for each metric position
+    
+    # Collect all values by metric index
+    for run in thresh_scores:
+        for param in run:
+            for i, metric in enumerate(param):
+                all_values[i].append(metric)
+    
+    # Compute mean and std for each metric
+    avg_overall = [np.mean(values) for values in all_values]
+    std_overall = [np.std(values, ddof=1) for values in all_values]
 
-        if true_bias in res[1]:
-            ibe_standard_score += ((len(hyp_space) - len(res[1])) / (len(hyp_space) - 1)) * weight_positive
-        else:
-            ibe_standard_score -= weight_negative
 
-        if true_bias in res[2]:
-            jc_score += ((len(hyp_space) - len(res[2])) / (len(hyp_space) - 1)) * weight_positive
-        else:
-            jc_score -= weight_negative
+    return avg_thresh,std_thresh,avg_overall,std_overall,thresh_scores,all_values
 
-        if true_bias in res[3]:
-            ibe_star_score += ((len(hyp_space) - len(res[3])) / (len(hyp_space) - 1)) * weight_positive
-        else:
-            ibe_star_score -= weight_negative
 
-    if printing:
-        print("IBE-ER: " + str(ibe_er_score))
-        print("IBE Standard: " + str(ibe_standard_score))
-        print("JC: " + str(jc_score))
-        print("IBE Star: " + str(ibe_star_score))
-
-    return ibe_er_score, ibe_standard_score, jc_score, ibe_star_score
-
+def generate_subsets(a, b):
+    # Set to hold unique subsets (as tuples)
+    unique_subsets = set()
+    # Generate subsets of b, including the empty subset
+    for r in range(len(b) + 1):
+        observed_subsets=[]
+        for subset_b in unique_combinations(b, r):
+            if subset_b not in observed_subsets:
+                observed_subsets.append(subset_b)
+                # For each subset of b, combine it with all elements from a
+                subset = tuple(a) + tuple(subset_b)
+                unique_subsets.add(subset)  # Add the tuple to the set (removes duplicates)
+    
+    # Convert the set back to a list and return
+    return [list(subset) for subset in unique_subsets]
 
 # Additional Helper Functions (Unchanged)
 def unique_combinations(iterable, r):
@@ -296,7 +390,8 @@ def repeat_chain(values, counts):
 
 
 
-def run_simulations(n_tosses,n_repetitions=1000, bias_lower=.1, bias_upper=.9, partitioning=[3,5,7,9,11], thresholds=[0.5,0.6,.7,.8,.9,1],weight_positive=1,weight_negative=1):
+
+def run_simulations(n_tosses,n_repetitions=1000, bias_lower=.1, bias_upper=.9, partitioning=[3,5,7,9,11], thresholds=[0.5,0.6,.7,.8,.9,1],weight_positive=1,weight_negative=1,uncert_lower=0.5,uncert_upper=1.0,bonus=0.1):
     """
     Run simulations for different partitions, thresholds, and biases.
     """
@@ -304,22 +399,19 @@ def run_simulations(n_tosses,n_repetitions=1000, bias_lower=.1, bias_upper=.9, p
     for partition in partitioning:
         print(f"Partition: {partition}")
         partition_results = []
-        for threshold in thresholds:
-            print(f"Threshold: {threshold}")
-            threshold_results = []
-            for bias in np.linspace(bias_lower,bias_upper,partition)[int(len(np.linspace(bias_lower,bias_upper,partition))/2):]:
-                print(f"Bias: {bias}")
-                threshold_results.append(
-                    simulation(n_repetitions, bias, n_tosses, threshold, weight_positive, weight_negative, 
-                               np.linspace(bias_lower, bias_upper, partition), 0.5, 1, False)
-                )
-            partition_results.append(threshold_results)
+
+        for bias in np.linspace(bias_lower,bias_upper,partition)[int(len(np.linspace(bias_lower,bias_upper,partition))/2):]:
+            print(f"Bias: {bias}")
+            partition_results.append(
+                simulation(n_repetitions, bias, n_tosses, thresholds, weight_positive, weight_negative, 
+                           np.linspace(bias_lower, bias_upper, partition), uncert_lower, uncert_upper,bonus)
+            )
         results.append(partition_results)
     return results
 
-def plot_results(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
+def plot_avg_thresh_std(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
     """
-    Generate and save plots for simulation results with x-ticks corresponding to bias_values.
+    Plot avg_thresh and std_thresh results for each threshold, across biases and rules.
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -327,135 +419,70 @@ def plot_results(results, partitioning, thresholds, bias_lower, bias_upper, rule
         current_partition_results = results[i]
         num_biases = partition
         bias_values = np.linspace(bias_lower, bias_upper, num_biases)[int(len(np.linspace(bias_lower, bias_upper, num_biases)) / 2):]
-        jitter = ((max(bias_values)-min(bias_values))/(len(bias_values-1)))*.25
-        # Plot results for each threshold
-        fig, axes = plt.subplots(2, 3, figsize=(15, 10), sharey=True)
-        fig.suptitle(f'Partition: {partition}', fontsize=16)
+        jitter = ((max(bias_values) - min(bias_values)) / (len(bias_values) - 1)) * 0.25
 
-        for j, threshold_results in enumerate(current_partition_results):
-            position=-1
-            row, col = divmod(j, 3)
-            ax = axes[row, col]
-
-            for rule_idx, (rule_name, marker) in enumerate(zip(rule_labels, marker_styles)):
-                rule_values = [bias_result[rule_idx] for bias_result in threshold_results]
-                bias_values_jittered = [val + jitter*position for val in bias_values]
-                ax.plot(bias_values_jittered, rule_values, label=rule_name,marker=marker, linestyle='None', markersize=8)
-                position+=0.5
-
-            ax.set_title(f'Threshold: {thresholds[j]:.1f}')
-            ax.set_xlabel('Bias')
-            ax.set_xticks(bias_values)  # Set x-ticks to correspond to bias_values
-            ax.set_xticklabels([f"{bias:.2f}" for bias in bias_values])  # Add labels
-            
-            bias_val_dif = bias_values[1]-bias_values[0]
-            grid_values = [val + bias_val_dif/2 for val in bias_values[:-1]]  # Example grid values
-            # Manually add vertical grid lines at the specific grid positions
-            for gv in grid_values:
-                ax.axvline(gv, color='black', linestyle='--', linewidth=0.7)
-            ax.axhline(0, color='lightgray', linestyle='--', linewidth=0.7)
-            if col == 0:
-                ax.set_ylabel('Values')
-
-        # Hide unused axes for columns 2 and 3
-        for j in range(len(thresholds), 6):
-            row, col = divmod(j, 3)
-            axes[row, col].axis('off')
-
-        # Add legend to the last subplot
-        axes[-1, -1].legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.tight_layout()
-        plt.subplots_adjust(top=0.9)
-
-        filename = os.path.join(output_dir, f"n_tosses_{n_tosses}_partition_{partition}_plot.pdf")
-        plt.savefig(filename, format='pdf')
-        plt.show()
-
-        
-def plot_results2(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
-    """
-    Generate and save plots for simulation results, creating a separate plot for each threshold.
-    """
-    os.makedirs(output_dir, exist_ok=True)
-
-    for i, partition in enumerate(partitioning):
-        current_partition_results = results[i]
-        num_biases = partition
-        bias_values = np.linspace(bias_lower,bias_upper,num_biases)[int(len(np.linspace(bias_lower,bias_upper,num_biases))/2):]
-        jitter = ((max(bias_values)-min(bias_values))/(len(bias_values-1)))*.25
-
-
-        # Iterate over thresholds and generate separate plots
-        for j, threshold_results in enumerate(current_partition_results):
-            position=-1
-            # Create a new plot for each threshold
+        for threshold_idx, threshold in enumerate(thresholds):
             fig, ax = plt.subplots(figsize=(10, 6))
-            fig.suptitle(f'Partition: {partition}, Threshold: {thresholds[j]:.1f}', fontsize=16)
+            fig.suptitle(f'Partition: {partition}, Threshold: {threshold:.1f}', fontsize=16)
+            position = -1
 
             for rule_idx, (rule_name, marker) in enumerate(zip(rule_labels, marker_styles)):
-                rule_values = [bias_result[rule_idx] for bias_result in threshold_results]
-                bias_values_jittered = [val + jitter*position for val in bias_values]
-                ax.plot(bias_values_jittered, rule_values, label=rule_name,marker=marker, linestyle='None', markersize=8)
-                position+=0.5
+                means = [bias_result[0][threshold_idx][rule_idx] for bias_result in current_partition_results]
+                stds = [bias_result[1][threshold_idx][rule_idx] for bias_result in current_partition_results]
+
+                bias_values_jittered = [val + jitter * position for val in bias_values]
+                ax.errorbar(bias_values_jittered, means, yerr=stds, label=rule_name, marker=marker,
+                            linestyle='None', markersize=8, capsize=5)
+                position += 0.5
 
             ax.set_xlabel('Bias')
-            ax.set_xticks(bias_values)  # Set x-ticks to correspond to bias_values
-            ax.set_xticklabels([f"{bias:.2f}" for bias in bias_values])  # Add labels
-            ax.set_ylabel('Values')
-            bias_val_dif = bias_values[1]-bias_values[0]
-            grid_values = [val + bias_val_dif/2 for val in bias_values[:-1]]  # Example grid values
-            # Manually add vertical grid lines at the specific grid positions
+            ax.set_ylabel('Avg Value ± Std')
+            ax.set_xticks(bias_values)
+            ax.set_xticklabels([f"{bias:.2f}" for bias in bias_values])
+            bias_val_dif = bias_values[1] - bias_values[0]
+            grid_values = [val + bias_val_dif / 2 for val in bias_values[:-1]]
             for gv in grid_values:
                 ax.axvline(gv, color='black', linestyle='--', linewidth=0.7)
             ax.axhline(0, color='lightgray', linestyle='--', linewidth=0.7)
-            ax.legend(loc='upper left')
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-            # Save the plot for the current threshold
-            filename = os.path.join(output_dir, f"n_tosses_{n_tosses}_partition_{partition}_threshold_{thresholds[j]:.1f}_plot.pdf")
             plt.tight_layout()
-            plt.subplots_adjust(top=0.9)  # Adjust the title area
-
+            plt.subplots_adjust(top=0.9)
+            filename = os.path.join(output_dir, f"n_tosses_{n_tosses}_partition_{partition}_threshold_{threshold:.1f}_avg_thresh_std.pdf")
             plt.savefig(filename, format='pdf')
-            plt.show()  # Show the plot for visual inspection
+            plt.show()
 
-
-def plot_mean_std(results, partitioning, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
+def plot_avg_overall_std(results, partitioning, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
     """
-    Generate and save mean and standard deviation plots across thresholds.
+    Plot avg_overall and std_overall results across biases and rules (ignoring thresholds).
     """
     os.makedirs(output_dir, exist_ok=True)
 
     for i, partition in enumerate(partitioning):
         current_partition_results = results[i]
         num_biases = partition
-        bias_values = np.linspace(bias_lower,bias_upper,num_biases)[int(len(np.linspace(bias_lower,bias_upper,num_biases))/2):]
-        jitter = ((max(bias_values)-min(bias_values))/(len(bias_values-1)))*.25
+        bias_values = np.linspace(bias_lower, bias_upper, num_biases)[int(len(np.linspace(bias_lower, bias_upper, num_biases)) / 2):]
+        jitter = ((max(bias_values) - min(bias_values)) / (len(bias_values) - 1)) * 0.25
 
-        title_str = f"Coin biases for H: {', '.join([f'{b:.2f}' for b in bias_values])}"
         fig, ax = plt.subplots(figsize=(10, 6))
-        fig.suptitle(title_str, fontsize=16)
-        position=-1
+        fig.suptitle(f'Partition: {partition} - Overall Averages', fontsize=16)
+        position = -1
 
         for rule_idx, (rule_name, marker) in enumerate(zip(rule_labels, marker_styles)):
-            all_rule_values = np.array([
-                [bias_result[rule_idx] for bias_result in threshold_results]
-                for threshold_results in current_partition_results
-            ])
-            mean_values = np.mean(all_rule_values, axis=0)
-            std_values = np.std(all_rule_values, axis=0)
-            bias_values_jittered = [val + jitter*position for val in bias_values]
+            means = [bias_result[2][rule_idx] for bias_result in current_partition_results]
+            stds = [bias_result[3][rule_idx] for bias_result in current_partition_results]
 
-            ax.errorbar(bias_values_jittered, mean_values, yerr=std_values, label=rule_name,
-                        capsize=5, marker=marker, linestyle='None', markersize=8)
-            position+=0.5
+            bias_values_jittered = [val + jitter * position for val in bias_values]
+            ax.errorbar(bias_values_jittered, means, yerr=stds, label=rule_name, marker=marker,
+                        linestyle='None', markersize=8, capsize=5)
+            position += 0.5
 
         ax.set_xlabel('Bias')
-        ax.set_xticks(bias_values)  # Set x-ticks to correspond to bias_values
-        ax.set_xticklabels([f"{bias:.2f}" for bias in bias_values])  # Add labels
-        ax.set_ylabel('Values')
-        bias_val_dif = bias_values[1]-bias_values[0]
-        grid_values = [val + bias_val_dif/2 for val in bias_values[:-1]]  # Example grid values
-        # Manually add vertical grid lines at the specific grid positions
+        ax.set_ylabel('Avg Overall Value ± Std')
+        ax.set_xticks(bias_values)
+        ax.set_xticklabels([f"{bias:.2f}" for bias in bias_values])
+        bias_val_dif = bias_values[1] - bias_values[0]
+        grid_values = [val + bias_val_dif / 2 for val in bias_values[:-1]]
         for gv in grid_values:
             ax.axvline(gv, color='black', linestyle='--', linewidth=0.7)
         ax.axhline(0, color='lightgray', linestyle='--', linewidth=0.7)
@@ -463,40 +490,215 @@ def plot_mean_std(results, partitioning, bias_lower, bias_upper, rule_labels, ma
 
         plt.tight_layout()
         plt.subplots_adjust(top=0.9)
-
-        filename = os.path.join(output_dir, f"n_tosses_{n_tosses}_partition_{partition}_mean_std_plot.pdf")
+        filename = os.path.join(output_dir, f"n_tosses_{n_tosses}_partition_{partition}_avg_overall_std.pdf")
         plt.savefig(filename, format='pdf')
         plt.show()
 
-def export_results_to_csv(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, output_dir, n_tosses):
+def plot_mean_std_by_threshold_over_bias(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
     """
-    Export simulation results to CSV files for each partition.
+    Plot mean/std results per threshold (x-axis), averaged over biases for each rule.
     """
     os.makedirs(output_dir, exist_ok=True)
-    
+
     for i, partition in enumerate(partitioning):
         current_partition_results = results[i]
         num_biases = partition
-        bias_values = np.linspace(bias_lower,bias_upper,num_biases)[int(len(np.linspace(bias_lower,bias_upper,num_biases))/2):]
 
-        # Prepare the data for CSV
-        csv_data = []
-        for j, threshold_results in enumerate(current_partition_results):
-            threshold = thresholds[j]
-            for k, bias in enumerate(bias_values):
-                row = [bias, threshold]
-                row.extend([threshold_results[k][rule_idx] for rule_idx in range(len(rule_labels))])
-                csv_data.append(row)
+        # Collect mean/std across biases for each threshold and rule
+        fig, ax = plt.subplots(figsize=(10, 6))
+        fig.suptitle(f'Partition: {partition} - Mean over Biases by Threshold', fontsize=16)
+        position = -1
 
-        # Define CSV filename
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        filename = os.path.join(output_dir, f'n_tosses_{n_tosses}_partition_{partition}_results_{timestamp}.csv')
+        for rule_idx, (rule_name, marker) in enumerate(zip(rule_labels, marker_styles)):
+            means = []
+            stds = []
 
-        # Write to CSV
-        with open(filename, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['Bias', 'Threshold'] + rule_labels)
-            writer.writerows(csv_data)
+            for threshold_idx in range(len(thresholds)):
+                # Get all values for this threshold across biases
+                values = [bias_result[0][threshold_idx][rule_idx] for bias_result in current_partition_results]
+                means.append(np.mean(values))
+                stds.append(np.std(values, ddof=1))
 
-        print(f"Exported results for partition {partition} to {filename}.")
+            thresholds_jittered = [t + 0.01 * position for t in thresholds]
+            ax.errorbar(thresholds_jittered, means, yerr=stds, label=rule_name, marker=marker,
+                        linestyle='None', markersize=8, capsize=5)
+            position += 0.5
+
+        ax.set_xlabel('Threshold')
+        ax.set_ylabel('Avg Value ± Std (over biases)')
+        ax.set_xticks(thresholds)
+        ax.axhline(0, color='lightgray', linestyle='--', linewidth=0.7)
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.9)
+        filename = os.path.join(output_dir, f"n_tosses_{n_tosses}_partition_{partition}_mean_by_threshold_over_bias.pdf")
+        plt.savefig(filename, format='pdf')
+        plt.show()
+
+def plot_mean_std_overall(results, partitioning, rule_labels, marker_styles, output_dir, n_tosses):
+    """
+    Plot overall average (and std) across all thresholds and biases for each rule,
+    using different markers and default colors per column.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    for i, partition in enumerate(partitioning):
+        current_partition_results = results[i]
+        fig, ax = plt.subplots(figsize=(10, 6))
+        fig.suptitle(f'Partition: {partition} - Overall Mean and Std (all biases and thresholds)', fontsize=16)
+
+        means = np.mean([bias_result[2] for bias_result in current_partition_results], axis=0)
+        stds = np.mean([bias_result[3] for bias_result in current_partition_results], axis=0)
+
+        positions = range(len(rule_labels))
+        color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']  # Use matplotlib default color cycle
+
+        for idx, (pos, mean, std, label) in enumerate(zip(positions, means, stds, rule_labels)):
+            ax.errorbar(
+                pos, mean, yerr=std,
+                fmt=marker_styles[idx % len(marker_styles)],
+                color=color_cycle[idx % len(color_cycle)],
+                linestyle='None', capsize=5, markersize=8, label=label
+            )
+
+        ax.set_xticks(list(positions))
+        ax.set_xticklabels(rule_labels)
+        ax.set_ylabel('Overall Avg Value ± Std')
+        ax.axhline(0, color='lightgray', linestyle='--', linewidth=0.7)
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.9)
+        filename = os.path.join(output_dir, f"n_tosses_{n_tosses}_partition_{partition}_overall_mean_std.pdf")
+        plt.savefig(filename, format='pdf')
+        plt.show()    
         
+
+
+
+def export_all_results_to_csv(results, partitioning, thresholds, bias_lower, bias_upper, rule_labels, n_tosses, n_repetitions, weight_positive, weight_negative, uncert_lower, uncert_upper):
+    """
+    Export all simulation results: per-threshold stats and overall stats.
+    Each partition gets two CSVs: one for threshold-level and one for overall-level results.
+    """
+    output_dir = (
+        f"csvs_t{n_tosses}_r{n_repetitions}_wp{weight_positive}_wn{weight_negative}_"
+        f"ul{uncert_lower:.2f}_uu{uncert_upper:.2f}"
+    )
+    os.makedirs(output_dir, exist_ok=True)
+    
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+
+    for i, partition in enumerate(partitioning):
+        current_partition_results = results[i]
+        num_biases = partition
+        bias_values = np.linspace(bias_lower, bias_upper, num_biases)[int(len(np.linspace(bias_lower, bias_upper, num_biases)) / 2):]
+
+        # === Threshold-level results ===
+        thresh_csv_data = []
+        for bias_idx, bias_result in enumerate(current_partition_results):
+            avg_thresh, std_thresh, _, _, _, _ = bias_result
+
+            for threshold_idx, threshold in enumerate(thresholds):
+                row = [bias_values[bias_idx], threshold]
+                for rule_idx in range(len(rule_labels)):
+                    row.append(avg_thresh[threshold_idx][rule_idx])
+                    row.append(std_thresh[threshold_idx][rule_idx])
+                thresh_csv_data.append(row)
+
+        thresh_header = ['Bias', 'Threshold']
+        for rule in rule_labels:
+            thresh_header += [f'{rule} Mean', f'{rule} Std']
+
+        thresh_filename = os.path.join(
+            output_dir, f'n_tosses_{n_tosses}_partition_{partition}_threshold_results_{timestamp}.csv'
+        )
+        with open(thresh_filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(thresh_header)
+            writer.writerows(thresh_csv_data)
+        print(f"Exported threshold-level results for partition {partition} to {thresh_filename}.")
+
+        # === Overall results ===
+        overall_csv_data = []
+        for bias_idx, bias_result in enumerate(current_partition_results):
+            _, _, avg_overall, std_overall, _, _ = bias_result
+            row = [bias_values[bias_idx]]
+            for rule_idx in range(len(rule_labels)):
+                row.append(avg_overall[rule_idx])
+                row.append(std_overall[rule_idx])
+            overall_csv_data.append(row)
+
+        overall_header = ['Bias']
+        for rule in rule_labels:
+            overall_header += [f'{rule} Overall Mean', f'{rule} Overall Std']
+
+        overall_filename = os.path.join(
+            output_dir, f'n_tosses_{n_tosses}_partition_{partition}_overall_results_{timestamp}.csv'
+        )
+        with open(overall_filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(overall_header)
+            writer.writerows(overall_csv_data)
+        print(f"Exported overall results for partition {partition} to {overall_filename}.")
+
+def adjust_thresholds(thresholds, uncert_lower, uncert_upper):
+    thresholds = sorted(thresholds)  # ensure thresholds are sorted
+    
+    below_or_equal = [t for t in thresholds if t <= uncert_lower]
+    above_or_equal = [t for t in thresholds if t >= uncert_upper]
+    between = [t for t in thresholds if uncert_lower < t < uncert_upper]
+
+    result = []
+    if below_or_equal:
+        result.append(below_or_equal[-1])  # keep the highest ≤ uncert_lower
+    result += between
+    if above_or_equal:
+        result.append(above_or_equal[0])  # keep the lowest ≥ uncert_upper
+
+    return result
+
+
+def run_config(n_tosses, n_repetitions, partitioning, thresholds, bias_lower, bias_upper,
+               weight_positive, weight_negative, uncert_lower, uncert_upper,
+               rule_labels, marker_styles):
+    print(f"Started: t={n_tosses}, wp={weight_positive}, wn={weight_negative}, ul={uncert_lower}, uu={uncert_upper}", flush=True)
+    # Adjust thresholds for bounds
+    thresholds = adjust_thresholds(thresholds, uncert_lower, uncert_upper)
+
+    output_dir = (
+        f"plots_t{n_tosses}_r{n_repetitions}_wp{weight_positive}_wn{weight_negative}_"
+        f"ul{uncert_lower:.2f}_uu{uncert_upper:.2f}"
+    )
+
+    results = run_simulations(
+        n_tosses=n_tosses,
+        n_repetitions=n_repetitions,
+        bias_lower=bias_lower,
+        bias_upper=bias_upper,
+        partitioning=partitioning,
+        thresholds=thresholds,
+        weight_positive=weight_positive,
+        weight_negative=weight_negative,
+        uncert_lower=uncert_lower,
+        uncert_upper=uncert_upper
+    )
+
+    plot_avg_thresh_std(results, partitioning, thresholds, bias_lower, bias_upper,
+                        rule_labels, marker_styles, output_dir, n_tosses)
+
+    plot_avg_overall_std(results, partitioning, bias_lower, bias_upper,
+                         rule_labels, marker_styles, output_dir, n_tosses)
+
+    plot_mean_std_by_threshold_over_bias(results, partitioning, thresholds, bias_lower, bias_upper,
+                                         rule_labels, marker_styles, output_dir, n_tosses)
+
+    plot_mean_std_overall(results, partitioning, rule_labels, marker_styles, output_dir, n_tosses)
+
+    export_all_results_to_csv(results, partitioning, thresholds, bias_lower, bias_upper,
+                              rule_labels, n_tosses, n_repetitions,
+                              weight_positive, weight_negative,
+                              uncert_lower, uncert_upper)
+
+    return f"Finished: t={n_tosses}, wp={weight_positive}, wn={weight_negative}, ul={uncert_lower}, uu={uncert_upper}"
