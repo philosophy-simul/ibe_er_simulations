@@ -10,7 +10,7 @@ The simulation compares multiple inference strategies, including:
 * IBE-Standard (treats all evidence as certain)
 * IBE-Filtered (disregards low-certainty evidence)
 
-(Optional benchmarking rules such as Jeffrey Conditionalisation variants are discussed in the paper and also included here.)
+(Optional benchmarking rules such as Jeffrey Conditionalisation variants are mentioned in the paper and also included here.)
 
 Running the Simulations
 
