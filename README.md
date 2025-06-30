@@ -19,7 +19,8 @@ To run the simulations:
 1. Ensure you have Python 3.x installed, as well as the necessary libraries (numpy, multiprocessing, etc; see functions.py).
 2. Load both simulations.py and functions.py in your working directory.
 3. Execute the simulations by running simulations.py.
-
+4. Optionally, run figures.py to generate aggregate plots from the paper. (To do that, you need to also have figures_code.py in your working directory.)
+ 
 The script supports multi-processing and will automatically parallelise over available cores.
 
 Approximate runtime
