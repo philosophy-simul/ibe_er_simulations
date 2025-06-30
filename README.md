@@ -27,7 +27,7 @@ Approximate runtime
 
 With default settings:
 
-Runtime: about 1.5 hours
+Runtime: about 2 hours
 
 Hardware used: Apple M3 Pro, 18 GB RAM
 
