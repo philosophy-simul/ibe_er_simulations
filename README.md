@@ -16,8 +16,8 @@ Running the Simulations
 
 To run the simulations:
 
-1. Ensure you have Python 3.x installed, as well as the necessary libraries (numpy, multiprocessing, etc; see ibe_er.py).
-2. Load both simulations.py and ibe_er.py in your working directory.
+1. Ensure you have Python 3.x installed, as well as the necessary libraries (numpy, multiprocessing, etc; see functions.py).
+2. Load both simulations.py and functions.py in your working directory.
 3. Execute the simulations by running simulations.py.
 
 The script supports multi-processing and will automatically parallelise over available cores.
@@ -34,7 +34,7 @@ Outputs
 
 The script generates:
 
-1. Performance plots (PDFs) showing average score ± standard deviation for each rule across conditions
+1. Performance plots (PDFs) showing average score ± standard deviation for each rule across conditions.
 2. CSV files with detailed results for further analysis
 
 Citation / Use
