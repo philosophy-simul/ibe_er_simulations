@@ -49,6 +49,3 @@ if __name__ == '__main__':
                 print(f"{i}/{len(tasks)} - {result}")
             except Exception as e:
                 print(f"Error in task {i}: {e}")
-
-
-# started running: 16:55
