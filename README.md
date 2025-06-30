@@ -25,7 +25,7 @@ The script supports multi-processing and will automatically parallelise over ava
 Approximate runtime
 
 With default settings:
-Runtime: ~5 hours
+Runtime: ~45 minutes
 Hardware used: Apple M3 Pro, 18 GB RAM
 
 Runtime varies depending on the number of repetitions, coin tosses, hypothesis partitions, and uncertainty thresholds. For faster testing, reduce the number of repetitions in simulations.py.
