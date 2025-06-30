@@ -15,6 +15,8 @@ from matplotlib import pyplot as plt
 import csv
 import datetime
 from itertools import combinations
+import pickle
+
 
 def coin_toss_sequence(bias: float, n: int) -> List[int]:
     """
@@ -582,7 +584,7 @@ def export_all_results_to_csv(results, partitioning, thresholds, bias_lower, bia
     Each partition gets two CSVs: one for threshold-level and one for overall-level results.
     """
     output_dir = (
-        f"csvs_t{n_tosses}_r{n_repetitions}_wp{weight_positive}_wn{weight_negative}_"
+        f"csvs/csvs_t{n_tosses}_r{n_repetitions}_wp{weight_positive}_wn{weight_negative}_"
         f"ul{uncert_lower:.2f}_uu{uncert_upper:.2f}"
     )
     os.makedirs(output_dir, exist_ok=True)
@@ -667,7 +669,7 @@ def run_config(n_tosses, n_repetitions, partitioning, thresholds, bias_lower, bi
     thresholds = adjust_thresholds(thresholds, uncert_lower, uncert_upper)
 
     output_dir = (
-        f"plots_t{n_tosses}_r{n_repetitions}_wp{weight_positive}_wn{weight_negative}_"
+        f"plots/plots_t{n_tosses}_r{n_repetitions}_wp{weight_positive}_wn{weight_negative}_"
         f"ul{uncert_lower:.2f}_uu{uncert_upper:.2f}"
     )
 
@@ -699,5 +701,14 @@ def run_config(n_tosses, n_repetitions, partitioning, thresholds, bias_lower, bi
                               rule_labels, n_tosses, n_repetitions,
                               weight_positive, weight_negative,
                               uncert_lower, uncert_upper)
+    
+    filename = f'results_n_tosses_{n_tosses}_weight_positive_{weight_positive}_weight_negative_{weight_negative}_uncert_lower_{uncert_lower}_upper_{uncert_upper}.pkl'
+    os.makedirs('results_dir', exist_ok=True)
+    with open(os.path.join('results_dir', filename), 'wb') as f:
+        pickle.dump(results, f)
+
 
     return f"Finished: t={n_tosses}, wp={weight_positive}, wn={weight_negative}, ul={uncert_lower}, uu={uncert_upper}"
+
+
+    
