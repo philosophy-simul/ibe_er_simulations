@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Simulation of biased coin tosses and inference using various evidence-based methods (part of ongoing work with Finnur Dellsén)
+Simulation of biased coin tosses and inference using various evidence-based methods
 
 Started on Tue Nov 12 17:06:46 2024
-@author: boruttrpin
 """
 import multiprocessing
-from ibe_er import run_config
+from functions import run_config
 
 
 # Main Code
@@ -26,8 +25,8 @@ if __name__ == '__main__':
 
     tasks = []
     for n_tosses in [10, 25, 50, 100]:
-        for uncert_lower in [0.5, 0.75, 0.9]:
-            for uncert_upper in [0.6, 0.85, 1.0]:
+        for uncert_lower in [0.5]: # Here, one could add other (even multiple) values to change the span of uncertainty associated with uncertain evidence by setting the lower evidential confidence thresholds.
+            for uncert_upper in [1.0]: # Here, one would set the upper thresholds.
                 if uncert_lower >= uncert_upper:
                     continue
                 for weight_positive in [0, 1, 2, 10]:
