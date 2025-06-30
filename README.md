@@ -1,4 +1,4 @@
-Inference to the Best Explanation from Uncertain Evidence: Simulations
+Abductions from Uncertain Evidence: Simulations
 
 This repository contains the simulation code used to evaluate various inference rules under uncertainty. The framework models agents attempting to infer the bias of a coin from sequences of noisy evidence (biased coin tosses), scored according to the accuracy and informativeness of their inferences.
 
@@ -27,7 +27,7 @@ Approximate runtime
 
 With default settings:
 
-Runtime: ~45 minutes
+Runtime: about 1.5 hours
 
 Hardware used: Apple M3 Pro, 18 GB RAM
 
