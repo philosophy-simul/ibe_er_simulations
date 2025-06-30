@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Simulation of biased coin tosses and inference using various evidence-based methods (part of ongoing work with Finnur Dellsén)
+Simulation of biased coin tosses and inference using various evidence-based methods
 
 Started on Tue Nov 12 17:06:46 2024
-@author: boruttrpin
 """
 
 import numpy as np
