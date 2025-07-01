@@ -12,6 +12,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pickle
 import pandas as pd
+import glob
 
 
 def plot_mean_std_by_threshold_over_biasF(results, plot_partitioning, partitioning, thresholds, bias_lower, bias_upper, rule_labels, marker_styles, output_dir, n_tosses):
@@ -323,9 +324,11 @@ def fig4(n_tosses=10):
 
 
 def fig5():
+    file1_pattern="csvs/csvs_t100_r1000_wp10_wn0_ul0.50_uu1.00/n_tosses_100_partition_3_threshold_results_*.csv"
+    file2_pattern="csvs/csvs_t10_r1000_wp0_wn10_ul0.50_uu1.00/n_tosses_10_partition_11_threshold_results_*.csv"
     file_map = {
-        'Low Risk/Easy Task (100 tosses, 3 hyp., reward: 10, penalty: 0)': 'results_dir/results_n_tosses_100_weight_positive_10_weight_negative_0_uncert_lower_0.5_upper_1.0.pkl',
-        'High Risk/Hard Task (10 tosses, 11 hyp., reward: 0, penalty: 10)': 'results_dir/results_n_tosses_10_weight_positive_0_weight_negative_10_uncert_lower_0.5_upper_1.0.pkl'
+        'Low Risk/Easy Task (100 tosses, 3 hyp., reward: 10, penalty: 0)': glob.glob(file1_pattern)[0],
+        'High Risk/Hard Task (10 tosses, 11 hyp., reward: 0, penalty: 10)': glob.glob(file2_pattern)[0]
     }
     
     thresholds = [0.6, 0.7, 0.8, 0.9]  # adjust as needed
