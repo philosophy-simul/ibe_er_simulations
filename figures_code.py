@@ -23,12 +23,17 @@ def plot_mean_std_by_threshold_over_biasF(results, plot_partitioning, partitioni
     included_rules = ['IBE-Standard', 'IBE-StandardFiltered', 'IBE-ER']
     
     # Filter rule_labels and marker_styles accordingly
-    filtered_rules = [(name, marker) for name, marker in zip(rule_labels, marker_styles) if name in included_rules]
+    markersADJ = [marker_styles[2],marker_styles[0],marker_styles[1]]
+    ### markersADJ is a temporary fix to keep the styling of fig2 the same as fig5.
+    filtered_rules = [(name, marker) for name, marker in zip(rule_labels, markersADJ) if name in included_rules]
     display_names = {
         'IBE-Standard': r'$\mathrm{IBE}_{\mathrm{Ba}}$',
         'IBE-StandardFiltered': r'$\mathrm{IBE}_{\mathrm{Fi}}$',
         'IBE-ER': r'$\mathrm{IBE}_{\mathrm{ER}}$'
     }
+    rule_labelsADJ=['IBE-ER', 'IBE-Standard', 'IBE-StandardFiltered', 'JC', 'IBE-Star']
+    filtered_rulesADJ = [filtered_rules[1],filtered_rules[2],filtered_rules[0]]
+    ### rule_labelsADJ and filtered_rulesADJ are a temporary fix to keep the styling of fig2 the same as fig5.
     for i, partition in enumerate(partitioning):
         current_partition_results = results[i]
         num_biases = partition
@@ -39,13 +44,13 @@ def plot_mean_std_by_threshold_over_biasF(results, plot_partitioning, partitioni
             # fig.suptitle(f'Partition: {partition} - Mean over Biases by Threshold', fontsize=16)
             position = -1
     
-            for rule_idx, (rule_name, marker) in enumerate(filtered_rules):
+            for rule_idx, (rule_name, marker) in enumerate(filtered_rulesADJ): # Change back to filtered_rules later when a nicer fix is found.
                 means = []
                 stds = []
     
                 for threshold_idx in range(len(thresholds)):
                     # Get all values for this threshold across biases
-                    values = [bias_result[0][threshold_idx+1][rule_labels.index(rule_name)] for bias_result in current_partition_results]
+                    values = [bias_result[0][threshold_idx+1][rule_labelsADJ.index(rule_name)] for bias_result in current_partition_results] # Change back to rule_labels later when a nicer fix is found.
                     means.append(np.mean(values))
                     stds.append(np.std(values, ddof=1))
     
